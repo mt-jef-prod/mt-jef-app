@@ -43,12 +43,75 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Validate Supabase env
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          node <<'NODE'
+          const url = (process.env.VITE_SUPABASE_URL ?? '').trim()
+          const anonKey = (process.env.VITE_SUPABASE_ANON_KEY ?? '').trim()
+
+          if (!url) {
+            throw new Error('Missing VITE_SUPABASE_URL in GitHub Secrets')
+          }
+
+          if (!anonKey) {
+            throw new Error('Missing VITE_SUPABASE_ANON_KEY in GitHub Secrets')
+          }
+
+          let host
+
+          try {
+            host = new URL(url).host
+          } catch (error) {
+            throw new Error(`Invalid VITE_SUPABASE_URL secret: ${error.message}`)
+          }
+
+          const anonKeyKind = anonKey.startsWith('sb_publishable_')
+            ? 'publishable'
+            : anonKey.startsWith('eyJ')
+              ? 'jwt'
+              : 'unknown'
+
+          console.log(`[deploy] Supabase host: ${host}`)
+          console.log(`[deploy] Supabase anon key kind: ${anonKeyKind}`)
+          console.log(`[deploy] Supabase anon key length: ${anonKey.length}`)
+
+          if (anonKeyKind === 'unknown') {
+            throw new Error('Unexpected VITE_SUPABASE_ANON_KEY format')
+          }
+          NODE
+
       - name: Build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           GITHUB_PAGES_REPO: ${{ github.event.repository.name }}
         run: pnpm run build
+
+      - name: Verify bundled Supabase host
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+          const path = require('node:path')
+
+          const host = new URL(process.env.VITE_SUPABASE_URL.trim()).host
+          const assetsDir = path.join(process.cwd(), 'dist', 'assets')
+          const files = fs.readdirSync(assetsDir)
+          const jsFiles = files.filter((file) => file.endsWith('.js'))
+          const found = jsFiles.some((file) =>
+            fs.readFileSync(path.join(assetsDir, file), 'utf8').includes(host)
+          )
+
+          console.log(`[deploy] Bundled Supabase host: ${host}`)
+
+          if (!found) {
+            throw new Error('Supabase host was not found in the built asset bundle')
+          }
+          NODE
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
