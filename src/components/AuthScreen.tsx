@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
+import type { NoticeState } from "../lib/types";
 import { messageFromError } from "../lib/utils";
 
 interface AuthScreenProps {
@@ -7,15 +8,25 @@ interface AuthScreenProps {
   onInfo: (message: string) => void;
   onError: (message: string) => void;
   onRecoveryResolved?: () => void;
+  notice?: NoticeState | null;
 }
 
 type AuthMode = "signin" | "signup" | "forgot";
+
+function authDebug(step: string, details: Record<string, unknown>) {
+  if (!import.meta.env.DEV || import.meta.env.MODE === "test") {
+    return;
+  }
+
+  console.info("[mt-jef-auth]", step, details);
+}
 
 export function AuthScreen({
   passwordRecovery = false,
   onInfo,
   onError,
-  onRecoveryResolved
+  onRecoveryResolved,
+  notice
 }: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>("signin");
   const [loading, setLoading] = useState(false);
@@ -94,13 +105,42 @@ export function AuthScreen({
       return;
     }
 
+    if (loading) {
+      return;
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const cleanedFirstName = firstName.trim();
+    const cleanedLastName = lastName.trim();
+
+    if (!normalizedEmail) {
+      onError("Renseigne une adresse e-mail valide.");
+      return;
+    }
+
+    authDebug("submit:enter", {
+      mode,
+      email: normalizedEmail,
+      hasFirstName: Boolean(cleanedFirstName),
+      hasLastName: Boolean(cleanedLastName)
+    });
+
     setLoading(true);
 
     try {
       if (mode === "signin") {
+        authDebug("signin:request", {
+          email: normalizedEmail
+        });
+
         const { error } = await supabase.auth.signInWithPassword({
-          email,
+          email: normalizedEmail,
           password
+        });
+
+        authDebug("signin:result", {
+          email: normalizedEmail,
+          hasError: Boolean(error)
         });
 
         if (error) {
@@ -109,15 +149,31 @@ export function AuthScreen({
 
         onInfo("Connexion reussie.");
       } else if (mode === "signup") {
+        const emailRedirectTo = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
+
+        authDebug("signup:request", {
+          email: normalizedEmail,
+          hasFirstName: Boolean(cleanedFirstName),
+          hasLastName: Boolean(cleanedLastName)
+        });
+
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: normalizedEmail,
           password,
           options: {
+            emailRedirectTo,
             data: {
-              first_name: firstName,
-              last_name: lastName
+              ...(cleanedFirstName ? { first_name: cleanedFirstName } : {}),
+              ...(cleanedLastName ? { last_name: cleanedLastName } : {})
             }
           }
+        });
+
+        authDebug("signup:result", {
+          email: normalizedEmail,
+          hasError: Boolean(error),
+          hasUser: Boolean(data.user),
+          hasSession: Boolean(data.session)
         });
 
         if (error) {
@@ -127,12 +183,29 @@ export function AuthScreen({
         if (data.session) {
           onInfo("Compte cree et session ouverte.");
         } else {
-          onInfo("Compte cree. Verifie ton e-mail si la confirmation est activee.");
+          onInfo(
+            "Compte cree. Verifie ton e-mail pour confirmer l'inscription avant de te connecter."
+          );
         }
+
+        setEmail(normalizedEmail);
+        setPassword("");
+        setMode("signin");
       } else {
         const redirectTo = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+
+        authDebug("forgot-password:request", {
+          email: normalizedEmail,
           redirectTo
+        });
+
+        const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+          redirectTo
+        });
+
+        authDebug("forgot-password:result", {
+          email: normalizedEmail,
+          hasError: Boolean(error)
         });
 
         if (error) {
@@ -142,6 +215,14 @@ export function AuthScreen({
         onInfo("Lien de reinitialisation envoye si ce compte existe.");
       }
     } catch (error) {
+      authDebug("submit:error", {
+        mode,
+        email: normalizedEmail,
+        error:
+          error && typeof error === "object" && "message" in error
+            ? String(error.message)
+            : String(error)
+      });
       onError(messageFromError(error));
     } finally {
       setLoading(false);
@@ -158,6 +239,12 @@ export function AuthScreen({
           Un cockpit personnel pour transformer l'intention en action suivie,
           puis en accomplissement concret.
         </p>
+
+        {notice ? (
+          <div className={`notice-banner notice-banner--${notice.kind}`}>
+            {notice.message}
+          </div>
+        ) : null}
 
         {!passwordRecovery ? (
           <div className="segmented-control">
@@ -235,6 +322,7 @@ export function AuthScreen({
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="toi@example.com"
+                  autoComplete="email"
                   required
                 />
               </label>
@@ -247,6 +335,7 @@ export function AuthScreen({
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="••••••••"
+                    autoComplete={mode === "signin" ? "current-password" : "new-password"}
                     minLength={8}
                     required
                   />

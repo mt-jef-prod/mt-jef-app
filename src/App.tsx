@@ -177,13 +177,14 @@ export default function App() {
   }
 
   if (!user) {
-    return <AuthScreen onInfo={setInfo} onError={setError} />;
+    return <AuthScreen notice={notice} onInfo={setInfo} onError={setError} />;
   }
 
   if (passwordRecoveryOpen) {
     return (
       <AuthScreen
         passwordRecovery
+        notice={notice}
         onInfo={setInfo}
         onError={setError}
         onRecoveryResolved={() => setPasswordRecoveryOpen(false)}

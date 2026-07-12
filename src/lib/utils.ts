@@ -174,6 +174,7 @@ export function messageFromError(error: unknown): string {
   if (error && typeof error === "object") {
     const message = "message" in error ? String(error.message) : null;
     const code = "code" in error ? String(error.code) : null;
+    const status = "status" in error ? Number(error.status) : null;
 
     if (code === "23505") {
       return "Cette valeur existe deja ou viole une regle d'unicite.";
@@ -187,8 +188,52 @@ export function messageFromError(error: unknown): string {
       return "Action refusee par la politique de securite de la base.";
     }
 
+    if (
+      message?.includes("Could not find the table") ||
+      (message?.includes("relation") && message.includes("does not exist")) ||
+      message?.includes("schema cache")
+    ) {
+      return "La base Supabase n'est pas initialisee pour cette application. Appliquez les migrations du projet puis reessayez.";
+    }
+
     if (message?.includes("violates check constraint")) {
       return `La base a refuse cette valeur car elle ne respecte pas une regle metier. Detail: ${message}`;
+    }
+
+    if (code === "email_address_invalid") {
+      return "L'adresse e-mail est invalide. Verifie le format et supprime les espaces avant ou apres.";
+    }
+
+    if (
+      code === "user_already_exists" ||
+      message?.includes("User already registered") ||
+      message?.includes("already been registered")
+    ) {
+      return "Un compte existe deja avec cette adresse e-mail.";
+    }
+
+    if (
+      code === "weak_password" ||
+      message?.includes("Password should be at least") ||
+      message?.includes("Password should contain")
+    ) {
+      return "Le mot de passe est trop faible. Utilise au moins 8 caracteres avec une structure plus robuste.";
+    }
+
+    if (message?.includes("Email not confirmed")) {
+      return "Cette adresse e-mail n'a pas encore ete confirmee. Verifie ta boite mail puis reessaie.";
+    }
+
+    if (message?.includes("Invalid login credentials")) {
+      return "E-mail ou mot de passe incorrect.";
+    }
+
+    if (message?.includes("Signups not allowed for this instance")) {
+      return "La creation de compte est desactivee sur ce projet Supabase.";
+    }
+
+    if (message?.includes("fetch failed") || status === 0) {
+      return "Connexion reseau impossible vers Supabase. Verifie la connexion, l'URL du projet et les autorisations reseau.";
     }
 
     if (message) {
