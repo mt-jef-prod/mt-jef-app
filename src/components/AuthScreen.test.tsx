@@ -13,6 +13,7 @@ const authMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/supabase", () => ({
+  resolveSupabaseEndpoint: (path: string) => `https://drimjckdwelctdytxrxz.supabase.co${path}`,
   supabase: {
     auth: {
       signInWithPassword: authMocks.signInWithPassword,

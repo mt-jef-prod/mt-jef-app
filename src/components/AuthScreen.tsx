@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
-import { supabase } from "../lib/supabase";
-import type { NoticeState } from "../lib/types";
+import { resolveSupabaseEndpoint, supabase } from "../lib/supabase";
+import type { AuthAttemptDiagnostic, NoticeState, SupabaseDiagnosticCategory } from "../lib/types";
 import { messageFromError } from "../lib/utils";
 
 interface AuthScreenProps {
   passwordRecovery?: boolean;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
+  onAuthAttempt?: (diagnostic: AuthAttemptDiagnostic) => void;
   onRecoveryResolved?: () => void;
   notice?: NoticeState | null;
 }
@@ -25,6 +26,7 @@ export function AuthScreen({
   passwordRecovery = false,
   onInfo,
   onError,
+  onAuthAttempt,
   onRecoveryResolved,
   notice
 }: AuthScreenProps) {
@@ -35,6 +37,90 @@ export function AuthScreen({
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+
+  function nowMs() {
+    return typeof performance !== "undefined" ? performance.now() : Date.now();
+  }
+
+  function getDurationMs(startedAtMs: number) {
+    return Math.round(nowMs() - startedAtMs);
+  }
+
+  function getErrorName(error: unknown) {
+    if (error && typeof error === "object" && "name" in error && typeof error.name === "string") {
+      return error.name;
+    }
+
+    return null;
+  }
+
+  function getErrorMessage(error: unknown) {
+    if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+      return error.message;
+    }
+
+    return typeof error === "string" ? error : null;
+  }
+
+  function getErrorStatus(error: unknown) {
+    if (error && typeof error === "object" && "status" in error) {
+      const status = Number(error.status);
+
+      return Number.isFinite(status) ? status : null;
+    }
+
+    return null;
+  }
+
+  function getErrorCode(error: unknown) {
+    if (error && typeof error === "object" && "code" in error && typeof error.code === "string") {
+      return error.code;
+    }
+
+    return null;
+  }
+
+  function classifyAuthError(error: unknown): SupabaseDiagnosticCategory {
+    const errorName = getErrorName(error);
+    const errorMessage = getErrorMessage(error)?.toLowerCase() ?? "";
+    const status = getErrorStatus(error);
+    const browserOnline = typeof navigator === "undefined" ? true : navigator.onLine;
+
+    if (errorName === "AbortError") {
+      return "timeout";
+    }
+
+    if (!browserOnline) {
+      return "network_unavailable";
+    }
+
+    if (errorMessage.includes("cors") || errorMessage.includes("cross-origin")) {
+      return "cors";
+    }
+
+    if (
+      errorMessage.includes("failed to fetch") ||
+      errorMessage.includes("fetch failed") ||
+      errorMessage.includes("err_name_not_resolved") ||
+      errorMessage.includes("name not resolved")
+    ) {
+      return "other";
+    }
+
+    if (status != null && [400, 401, 403, 422, 429].includes(status)) {
+      return "supabase_auth";
+    }
+
+    if (status != null && status >= 400) {
+      return "http";
+    }
+
+    return "other";
+  }
+
+  function reportAuthAttempt(diagnostic: AuthAttemptDiagnostic) {
+    onAuthAttempt?.(diagnostic);
+  }
 
   const submitLabel = useMemo(() => {
     if (passwordRecovery) {
@@ -126,9 +212,13 @@ export function AuthScreen({
     });
 
     setLoading(true);
+    const attemptedAt = new Date().toISOString();
+    const startedAtMs = nowMs();
 
     try {
       if (mode === "signin") {
+        const endpoint = resolveSupabaseEndpoint("/auth/v1/token?grant_type=password") ?? "/auth/v1/token?grant_type=password";
+
         authDebug("signin:request", {
           email: normalizedEmail
         });
@@ -147,9 +237,23 @@ export function AuthScreen({
           throw error;
         }
 
+        reportAuthAttempt({
+          action: "signin",
+          attempted_at: attemptedAt,
+          category: null,
+          duration_ms: getDurationMs(startedAtMs),
+          endpoint,
+          error_message: null,
+          error_name: null,
+          http_status: null,
+          success: true,
+          supabase_code: null
+        });
+
         onInfo("Connexion reussie.");
       } else if (mode === "signup") {
         const emailRedirectTo = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
+        const endpoint = resolveSupabaseEndpoint("/auth/v1/signup") ?? "/auth/v1/signup";
 
         authDebug("signup:request", {
           email: normalizedEmail,
@@ -179,6 +283,19 @@ export function AuthScreen({
         if (error) {
           throw error;
         }
+
+        reportAuthAttempt({
+          action: "signup",
+          attempted_at: attemptedAt,
+          category: null,
+          duration_ms: getDurationMs(startedAtMs),
+          endpoint,
+          error_message: null,
+          error_name: null,
+          http_status: null,
+          success: true,
+          supabase_code: null
+        });
 
         if (data.session) {
           onInfo("Compte cree et session ouverte.");
@@ -215,6 +332,26 @@ export function AuthScreen({
         onInfo("Lien de reinitialisation envoye si ce compte existe.");
       }
     } catch (error) {
+      if (mode === "signin" || mode === "signup") {
+        const endpoint =
+          mode === "signup"
+            ? resolveSupabaseEndpoint("/auth/v1/signup") ?? "/auth/v1/signup"
+            : resolveSupabaseEndpoint("/auth/v1/token?grant_type=password") ?? "/auth/v1/token?grant_type=password";
+
+        reportAuthAttempt({
+          action: mode === "signup" ? "signup" : "signin",
+          attempted_at: attemptedAt,
+          category: classifyAuthError(error),
+          duration_ms: getDurationMs(startedAtMs),
+          endpoint,
+          error_message: getErrorMessage(error),
+          error_name: getErrorName(error),
+          http_status: getErrorStatus(error),
+          success: false,
+          supabase_code: getErrorCode(error)
+        });
+      }
+
       authDebug("submit:error", {
         mode,
         email: normalizedEmail,

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { AuthScreen } from "./components/AuthScreen";
 import { AppShell } from "./components/AppShell";
+import { SupabaseDiagnosticsPanel } from "./features/diagnostics/SupabaseDiagnosticsPanel";
 import { supabase, isSupabaseConfigured, supabaseConfigError } from "./lib/supabase";
-import type { NoticeState, ProfileRow, SectionDefinition } from "./lib/types";
+import type { AuthAttemptDiagnostic, NoticeState, ProfileRow, SectionDefinition } from "./lib/types";
 import { messageFromError } from "./lib/utils";
 import { useAuthSession } from "./hooks/useAuthSession";
 import { DashboardSection } from "./features/dashboard/DashboardSection";
@@ -33,6 +34,7 @@ export default function App() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
   const [passwordRecoveryOpen, setPasswordRecoveryOpen] = useState(false);
+  const [authAttempt, setAuthAttempt] = useState<AuthAttemptDiagnostic | null>(null);
 
   useEffect(() => {
     if (!notice) {
@@ -149,147 +151,170 @@ export default function App() {
 
   if (!isSupabaseConfigured) {
     return (
-      <main className="config-screen">
-        <section className="config-panel fade-up">
-          <p className="auth-panel__kicker">Configuration requise</p>
-          <h1>M.T JËF</h1>
-          <p>
-            {supabaseConfigError ??
-              "Renseigne VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY dans ton environnement avant de lancer l'application."}
-          </p>
-          <pre>
-            <code>{`cp .env.example .env\n# puis complète les valeurs Supabase locales`}</code>
-          </pre>
-        </section>
-      </main>
+      <>
+        <main className="config-screen">
+          <section className="config-panel fade-up">
+            <p className="auth-panel__kicker">Configuration requise</p>
+            <h1>M.T JËF</h1>
+            <p>
+              {supabaseConfigError ??
+                "Renseigne VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY dans ton environnement avant de lancer l'application."}
+            </p>
+            <pre>
+              <code>{`cp .env.example .env\n# puis complète les valeurs Supabase locales`}</code>
+            </pre>
+          </section>
+        </main>
+        <SupabaseDiagnosticsPanel authAttempt={authAttempt} />
+      </>
     );
   }
 
   if (loading) {
     return (
-      <main className="config-screen">
-        <section className="config-panel fade-up">
-          <p className="auth-panel__kicker">Initialisation</p>
-          <h1>Chargement de la session</h1>
-        </section>
-      </main>
+      <>
+        <main className="config-screen">
+          <section className="config-panel fade-up">
+            <p className="auth-panel__kicker">Initialisation</p>
+            <h1>Chargement de la session</h1>
+          </section>
+        </main>
+        <SupabaseDiagnosticsPanel authAttempt={authAttempt} />
+      </>
     );
   }
 
   if (!user) {
-    return <AuthScreen notice={notice} onInfo={setInfo} onError={setError} />;
+    return (
+      <>
+        <AuthScreen
+          notice={notice}
+          onInfo={setInfo}
+          onError={setError}
+          onAuthAttempt={setAuthAttempt}
+        />
+        <SupabaseDiagnosticsPanel authAttempt={authAttempt} />
+      </>
+    );
   }
 
   if (passwordRecoveryOpen) {
     return (
-      <AuthScreen
-        passwordRecovery
-        notice={notice}
-        onInfo={setInfo}
-        onError={setError}
-        onRecoveryResolved={() => setPasswordRecoveryOpen(false)}
-      />
+      <>
+        <AuthScreen
+          passwordRecovery
+          notice={notice}
+          onInfo={setInfo}
+          onError={setError}
+          onAuthAttempt={setAuthAttempt}
+          onRecoveryResolved={() => setPasswordRecoveryOpen(false)}
+        />
+        <SupabaseDiagnosticsPanel authAttempt={authAttempt} />
+      </>
     );
   }
 
   const timezone = profile?.timezone ?? "Europe/Paris";
 
   return (
-    <AppShell
-      profile={profile}
-      profileLoading={profileLoading}
-      sections={SECTIONS}
-      activeSection={activeSection}
-      onSelectSection={setActiveSection}
-      onSignOut={handleSignOut}
-      notice={notice}
-      onSaveProfile={handleSaveProfile}
-      assistantTimeZone={timezone}
-    >
-      {activeSection === "dashboard" ? (
-        <DashboardSection
-          userId={user.id}
-          timezone={timezone}
-          refreshToken={dataVersion}
-          onError={setError}
-        />
-      ) : null}
+    <>
+      <AppShell
+        profile={profile}
+        profileLoading={profileLoading}
+        sections={SECTIONS}
+        activeSection={activeSection}
+        onSelectSection={setActiveSection}
+        onSignOut={handleSignOut}
+        notice={notice}
+        onSaveProfile={handleSaveProfile}
+        assistantTimeZone={timezone}
+      >
+        {activeSection === "dashboard" ? (
+          <DashboardSection
+            userId={user.id}
+            timezone={timezone}
+            refreshToken={dataVersion}
+            onError={setError}
+          />
+        ) : null}
 
-      {activeSection === "intention" ? (
-        <IntentionSection
-          userId={user.id}
-          timezone={timezone}
-          refreshToken={dataVersion}
-          onDataChanged={bumpDataVersion}
-          onInfo={setInfo}
-          onError={setError}
-        />
-      ) : null}
+        {activeSection === "intention" ? (
+          <IntentionSection
+            userId={user.id}
+            timezone={timezone}
+            refreshToken={dataVersion}
+            onDataChanged={bumpDataVersion}
+            onInfo={setInfo}
+            onError={setError}
+          />
+        ) : null}
 
-      {activeSection === "family" ? (
-        <FamilySection
-          userId={user.id}
-          timezone={timezone}
-          refreshToken={dataVersion}
-          onDataChanged={bumpDataVersion}
-          onInfo={setInfo}
-          onError={setError}
-        />
-      ) : null}
+        {activeSection === "family" ? (
+          <FamilySection
+            userId={user.id}
+            timezone={timezone}
+            refreshToken={dataVersion}
+            onDataChanged={bumpDataVersion}
+            onInfo={setInfo}
+            onError={setError}
+          />
+        ) : null}
 
-      {activeSection === "projects" ? (
-        <ProjectsSection
-          userId={user.id}
-          refreshToken={dataVersion}
-          onDataChanged={bumpDataVersion}
-          onInfo={setInfo}
-          onError={setError}
-        />
-      ) : null}
+        {activeSection === "projects" ? (
+          <ProjectsSection
+            userId={user.id}
+            refreshToken={dataVersion}
+            onDataChanged={bumpDataVersion}
+            onInfo={setInfo}
+            onError={setError}
+          />
+        ) : null}
 
-      {activeSection === "tasks" ? (
-        <TasksSection
-          userId={user.id}
-          timezone={timezone}
-          refreshToken={dataVersion}
-          onDataChanged={bumpDataVersion}
-          onInfo={setInfo}
-          onError={setError}
-        />
-      ) : null}
+        {activeSection === "tasks" ? (
+          <TasksSection
+            userId={user.id}
+            timezone={timezone}
+            refreshToken={dataVersion}
+            onDataChanged={bumpDataVersion}
+            onInfo={setInfo}
+            onError={setError}
+          />
+        ) : null}
 
-      {activeSection === "finances" ? (
-        <FinancesSection
-          userId={user.id}
-          timezone={timezone}
-          refreshToken={dataVersion}
-          onDataChanged={bumpDataVersion}
-          onInfo={setInfo}
-          onError={setError}
-        />
-      ) : null}
+        {activeSection === "finances" ? (
+          <FinancesSection
+            userId={user.id}
+            timezone={timezone}
+            refreshToken={dataVersion}
+            onDataChanged={bumpDataVersion}
+            onInfo={setInfo}
+            onError={setError}
+          />
+        ) : null}
 
-      {activeSection === "spiritual" ? (
-        <SpiritualSection
-          userId={user.id}
-          timezone={timezone}
-          refreshToken={dataVersion}
-          onDataChanged={bumpDataVersion}
-          onInfo={setInfo}
-          onError={setError}
-        />
-      ) : null}
+        {activeSection === "spiritual" ? (
+          <SpiritualSection
+            userId={user.id}
+            timezone={timezone}
+            refreshToken={dataVersion}
+            onDataChanged={bumpDataVersion}
+            onInfo={setInfo}
+            onError={setError}
+          />
+        ) : null}
 
-      {activeSection === "review" ? (
-        <DailyReviewSection
-          userId={user.id}
-          timezone={timezone}
-          refreshToken={dataVersion}
-          onDataChanged={bumpDataVersion}
-          onInfo={setInfo}
-          onError={setError}
-        />
-      ) : null}
-    </AppShell>
+        {activeSection === "review" ? (
+          <DailyReviewSection
+            userId={user.id}
+            timezone={timezone}
+            refreshToken={dataVersion}
+            onDataChanged={bumpDataVersion}
+            onInfo={setInfo}
+            onError={setError}
+          />
+        ) : null}
+      </AppShell>
+      <SupabaseDiagnosticsPanel authAttempt={authAttempt} />
+    </>
   );
 }

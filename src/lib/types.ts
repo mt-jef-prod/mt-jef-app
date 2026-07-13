@@ -1,4 +1,14 @@
 export type NumericLike = number | string;
+export type SupabaseKeyKind = "missing" | "publishable" | "legacy" | "unknown";
+export type SupabaseDiagnosticCategory =
+  | "configuration"
+  | "dns"
+  | "cors"
+  | "timeout"
+  | "network_unavailable"
+  | "http"
+  | "supabase_auth"
+  | "other";
 
 export type ProjectStatus =
   | "idea"
@@ -260,6 +270,33 @@ export interface AssistantFunctionResponse {
   reply: string;
   sources: string[];
   warnings: string[];
+}
+
+export interface SupabaseNetworkDiagnostic {
+  category: SupabaseDiagnosticCategory;
+  duration_ms: number | null;
+  endpoint: string | null;
+  error_message: string | null;
+  error_name: string | null;
+  host_reachable: boolean | null;
+  http_status: number | null;
+  notes: string[];
+  project_accessible: boolean;
+  state: string;
+  tested_at: string;
+}
+
+export interface AuthAttemptDiagnostic {
+  action: "signin" | "signup";
+  attempted_at: string;
+  category: SupabaseDiagnosticCategory | null;
+  duration_ms: number | null;
+  endpoint: string;
+  error_message: string | null;
+  error_name: string | null;
+  http_status: number | null;
+  success: boolean | null;
+  supabase_code: string | null;
 }
 
 export interface NoticeState {
