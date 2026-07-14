@@ -240,6 +240,8 @@ export default function App() {
             timezone={timezone}
             refreshToken={dataVersion}
             onError={setError}
+            onOpenPrayers={() => setActiveSection("spiritual")}
+            profile={profile}
           />
         ) : null}
 
@@ -305,6 +307,7 @@ export default function App() {
             onDataChanged={bumpDataVersion}
             onInfo={setInfo}
             onError={setError}
+            profile={profile}
           />
         ) : null}
 

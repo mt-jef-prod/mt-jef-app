@@ -1658,3 +1658,328 @@ code {
     padding-inline: 0.95rem;
   }
 }
+
+.prayer-card__note {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--border-soft);
+  background: linear-gradient(135deg, var(--bg-sage), rgba(255, 255, 255, 0.32));
+  color: var(--ink-soft);
+}
+
+.prayer-summary-grid,
+.prayer-meta-grid,
+.prayer-log-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.prayer-summary-grid,
+.prayer-meta-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.prayer-summary-grid__item {
+  display: grid;
+  gap: 0.2rem;
+  padding: 1rem 1.05rem;
+  border-radius: 18px;
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.prayer-summary-grid__item span {
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+}
+
+.prayer-summary-grid__item strong {
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.prayer-timeline {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.prayer-slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 24px;
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+}
+
+.prayer-slot strong {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 1rem;
+}
+
+.prayer-slot p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.96rem;
+}
+
+.prayer-slot--next {
+  border-color: rgba(13, 76, 115, 0.18);
+  background: linear-gradient(135deg, rgba(216, 231, 241, 0.94), rgba(255, 255, 255, 0.72));
+}
+
+.prayer-slot--current {
+  border-color: rgba(72, 132, 98, 0.18);
+  background: linear-gradient(135deg, rgba(72, 132, 98, 0.1), rgba(255, 255, 255, 0.76));
+}
+
+.prayer-slot__badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.prayer-completion {
+  display: grid;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.prayer-completion__summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+}
+
+.prayer-completion__summary strong {
+  font-size: 1rem;
+}
+
+.prayer-completion__summary span {
+  color: var(--ink-soft);
+  font-size: 0.94rem;
+}
+
+.prayer-log-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.prayer-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.prayer-status-pill {
+  min-height: 52px;
+  padding: 0.85rem 0.95rem;
+  border-radius: 18px;
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  font-weight: 600;
+  text-align: center;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.prayer-status-pill:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+}
+
+.prayer-status-pill.is-active {
+  border-color: rgba(13, 76, 115, 0.22);
+  background: linear-gradient(135deg, var(--accent-soft), rgba(255, 255, 255, 0.76));
+  color: var(--accent-strong);
+  box-shadow: 0 14px 30px rgba(13, 76, 115, 0.12);
+}
+
+.preview-theme--dark .prayer-card__note,
+.preview-theme--dark .prayer-summary-grid__item,
+.preview-theme--dark .prayer-slot,
+.preview-theme--dark .prayer-status-pill {
+  background: rgba(15, 23, 42, 0.56);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+.preview-theme--dark .prayer-slot--next {
+  background: rgba(122, 177, 213, 0.12);
+}
+
+.preview-theme--dark .prayer-slot--current {
+  background: rgba(91, 165, 121, 0.14);
+}
+
+.preview-theme--dark .prayer-status-pill.is-active {
+  background: rgba(122, 177, 213, 0.16);
+  color: var(--ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  .prayer-card__note,
+  .prayer-summary-grid__item,
+  .prayer-slot,
+  .prayer-status-pill {
+    background: rgba(15, 23, 42, 0.56);
+    border-color: rgba(148, 163, 184, 0.16);
+  }
+
+  .prayer-slot--next {
+    background: rgba(122, 177, 213, 0.12);
+  }
+
+  .prayer-slot--current {
+    background: rgba(91, 165, 121, 0.14);
+  }
+
+  .prayer-status-pill.is-active {
+    background: rgba(122, 177, 213, 0.16);
+    color: var(--ink);
+  }
+}
+
+@media (max-width: 779px) {
+  .prayer-summary-grid,
+  .prayer-meta-grid,
+  .prayer-log-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .prayer-slot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .prayer-slot__badges {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 479px) {
+  .prayer-status-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .prayer-summary-grid__item,
+  .prayer-slot,
+  .prayer-card__note {
+    padding-left: 0.9rem;
+    padding-right: 0.9rem;
+  }
+}
+
+.coach-card__metrics,
+.coach-weekly-grid,
+.coach-panel__summary-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.coach-card__metrics,
+.coach-weekly-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.coach-card__metric,
+.coach-card__plan,
+.coach-list-item {
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.coach-card__metric {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.coach-card__metric span,
+.coach-card__label {
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+}
+
+.coach-card__metric strong {
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.coach-card__plan,
+.coach-plan {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.coach-card__question {
+  margin: 0;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.coach-panel__stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.coach-panel__summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.coach-plan strong {
+  font-size: 1rem;
+}
+
+.coach-plan span {
+  color: var(--ink-soft);
+}
+
+.coach-list-item {
+  margin: 0;
+}
+
+.coach-panel__messages {
+  max-height: 34vh;
+  padding-right: 0.25rem;
+}
+
+.preview-theme--dark .coach-card__metric,
+.preview-theme--dark .coach-card__plan,
+.preview-theme--dark .coach-list-item {
+  background: rgba(15, 23, 42, 0.56);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+@media (prefers-color-scheme: dark) {
+  .coach-card__metric,
+  .coach-card__plan,
+  .coach-list-item {
+    background: rgba(15, 23, 42, 0.56);
+    border-color: rgba(148, 163, 184, 0.16);
+  }
+}
+
+@media (max-width: 779px) {
+  .coach-card__metrics,
+  .coach-weekly-grid,
+  .coach-panel__summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .coach-panel__messages {
+    max-height: 38vh;
+  }
+}

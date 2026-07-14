@@ -10,6 +10,7 @@ import {
 } from "../../components/ui";
 import { supabase } from "../../lib/supabase";
 import type {
+  ProfileRow,
   BudgetStatusRow,
   DailyIntentionRow,
   PrayerLogRow,
@@ -18,12 +19,20 @@ import type {
   TaskRow
 } from "../../lib/types";
 import { formatDate, formatMoney, messageFromError, toNumber, todayDate } from "../../lib/utils";
+import { CoachCard } from "../coach/CoachCard";
+import { CoachPanel } from "../coach/CoachPanel";
+import { useCoachConversation } from "../coach/useCoachConversation";
+import { useCoachInsights } from "../coach/useCoachInsights";
+import { PrayerSummaryCard } from "../spiritual/PrayerSummaryCard";
+import { usePrayerTimes } from "../spiritual/usePrayerTimes";
 
 interface DashboardSectionProps {
   userId: string;
   timezone: string;
   refreshToken: number;
   onError: (message: string) => void;
+  onOpenPrayers: () => void;
+  profile: ProfileRow | null;
 }
 
 const PRAYER_NAMES: PrayerLogRow["prayer_name"][] = ["fajr", "dhuhr", "asr", "maghrib", "isha"];
@@ -53,7 +62,9 @@ export function DashboardSection({
   userId,
   timezone,
   refreshToken,
-  onError
+  onError,
+  onOpenPrayers,
+  profile
 }: DashboardSectionProps) {
   const [loading, setLoading] = useState(true);
   const [balances, setBalances] = useState<SoldeReelRow[]>([]);
@@ -62,6 +73,22 @@ export function DashboardSection({
   const [todayIntention, setTodayIntention] = useState<DailyIntentionRow | null>(null);
   const [budgetAlerts, setBudgetAlerts] = useState<BudgetStatusRow[]>([]);
   const [prayers, setPrayers] = useState<PrayerLogRow[]>([]);
+  const [coachOpen, setCoachOpen] = useState(false);
+  const prayerTimes = usePrayerTimes({
+    city: profile?.city,
+    country: profile?.country,
+    timezone,
+    prayerLogs: prayers
+  });
+  const coachInsights = useCoachInsights({
+    timezone,
+    refreshToken,
+    onError
+  });
+  const coachConversation = useCoachConversation({
+    timezone,
+    firstName: profile?.first_name ?? null
+  });
 
   useEffect(() => {
     if (!supabase) {
@@ -157,6 +184,12 @@ export function DashboardSection({
   const topBalance = balances[0] ?? null;
   const topBudget = budgetAlerts[0] ?? null;
 
+  useEffect(() => {
+    if (prayerTimes.error) {
+      onError(prayerTimes.error);
+    }
+  }, [onError, prayerTimes.error]);
+
   return (
     <div className="today-grid">
       <SectionCard
@@ -181,11 +214,15 @@ export function DashboardSection({
 
       <SectionCard
         title="Prière du jour"
-        subtitle="Un suivi simple, sans score ni surcharge."
+        subtitle="Horaires du jour, prochaine prière et suivi spirituel discret."
       >
-        {loading ? (
-          <LoadingSkeleton lines={5} />
-        ) : (
+        <PrayerSummaryCard
+          liveState={prayerTimes.liveState}
+          loading={loading || prayerTimes.loading}
+          warning={prayerTimes.warning}
+          onOpenDetails={onOpenPrayers}
+        />
+        {!loading ? (
           <div className="list-stack">
             {PRAYER_NAMES.map((name) => {
               const status = prayerMap.get(name) ?? "not_recorded";
@@ -204,7 +241,7 @@ export function DashboardSection({
               );
             })}
           </div>
-        )}
+        ) : null}
       </SectionCard>
 
       <SectionCard
@@ -232,6 +269,18 @@ export function DashboardSection({
             ))}
           </div>
         )}
+      </SectionCard>
+
+      <SectionCard
+        title="Coach du jour"
+        subtitle="Écarts, blocages probables et prochaine action mesurable, sans culpabilisation."
+      >
+        <CoachCard
+          loading={coachInsights.loading}
+          report={coachInsights.report}
+          latestRecommendation={coachConversation.latestRecommendation}
+          onOpen={() => setCoachOpen(true)}
+        />
       </SectionCard>
 
       <SectionCard
@@ -321,6 +370,22 @@ export function DashboardSection({
           </div>
         )}
       </SectionCard>
+
+      <CoachPanel
+        open={coachOpen}
+        loading={coachInsights.loading}
+        report={coachInsights.report}
+        latestRecommendation={coachConversation.latestRecommendation}
+        historyEntries={coachConversation.historyEntries}
+        messages={coachConversation.messages}
+        sending={coachConversation.sending}
+        error={coachConversation.error}
+        emptyResponse={coachConversation.emptyResponse}
+        onClose={() => setCoachOpen(false)}
+        onStartConversation={coachConversation.startConversation}
+        onResetConversation={coachConversation.resetConversation}
+        onSendReply={coachConversation.sendReply}
+      />
     </div>
   );
 }
