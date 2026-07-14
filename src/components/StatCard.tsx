@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { MetricCard } from "./ui";
 
 interface StatCardProps {
   label: string;
@@ -15,14 +16,5 @@ export function StatCard({
   hint,
   icon
 }: StatCardProps) {
-  return (
-    <article className={`stat-card stat-card--${tone}`}>
-      <div className="stat-card__eyebrow">
-        <span>{label}</span>
-        {icon ? <span className="stat-card__icon">{icon}</span> : null}
-      </div>
-      <strong>{value}</strong>
-      {hint ? <p>{hint}</p> : null}
-    </article>
-  );
+  return <MetricCard label={label} value={value} tone={tone} hint={hint} icon={icon} />;
 }

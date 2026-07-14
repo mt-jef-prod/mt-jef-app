@@ -10,6 +10,7 @@ import type {
   SupabaseDiagnosticCategory,
   SupabaseNetworkDiagnostic
 } from "../../lib/types";
+import { DiagnosticPanel, GhostButton, SecondaryButton } from "../../components/ui";
 
 interface SupabaseDiagnosticsPanelProps {
   authAttempt: AuthAttemptDiagnostic | null;
@@ -27,7 +28,7 @@ const CATEGORY_LABELS: Record<SupabaseDiagnosticCategory, string> = {
 };
 
 export function SupabaseDiagnosticsPanel({ authAttempt }: SupabaseDiagnosticsPanelProps) {
-  const [open, setOpen] = React.useState(true);
+  const [open, setOpen] = React.useState(false);
   const [testing, setTesting] = React.useState(false);
   const [resettingCache, setResettingCache] = React.useState(false);
   const [networkDiagnostic, setNetworkDiagnostic] = React.useState<SupabaseNetworkDiagnostic | null>(null);
@@ -148,29 +149,16 @@ export function SupabaseDiagnosticsPanel({ authAttempt }: SupabaseDiagnosticsPan
         aria-controls="supabase-diagnostic-panel"
         onClick={() => setOpen((current) => !current)}
       >
-        Diagnostic Supabase
+        Diagnostic technique
       </button>
 
-      <aside
+      <DiagnosticPanel
         id="supabase-diagnostic-panel"
-        className={`diagnostic-panel${open ? " is-open" : ""}`}
-        aria-label="Panneau de diagnostic Supabase"
+        open={open}
+        title="Connexion Supabase"
+        eyebrow="Diagnostic technique"
+        onClose={() => setOpen(false)}
       >
-        <div className="diagnostic-panel__header">
-          <div>
-            <p className="profile-card__eyebrow">Diagnostic temporaire</p>
-            <h2>Connexion Supabase</h2>
-          </div>
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => setOpen(false)}
-          >
-            Réduire
-          </button>
-        </div>
-
-        <div className="diagnostic-panel__body">
           <section className="diagnostic-card">
             <h3>Configuration runtime</h3>
             <dl className="diagnostic-grid">
@@ -200,14 +188,9 @@ export function SupabaseDiagnosticsPanel({ authAttempt }: SupabaseDiagnosticsPan
           <section className="diagnostic-card">
             <div className="diagnostic-card__header">
               <h3>Test réseau</h3>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => void handleConnectionTest()}
-                disabled={testing}
-              >
+              <SecondaryButton onClick={() => void handleConnectionTest()} disabled={testing}>
                 {testing ? "Test en cours..." : "Tester la connexion Supabase"}
-              </button>
+              </SecondaryButton>
             </div>
 
             <dl className="diagnostic-grid">
@@ -295,23 +278,17 @@ export function SupabaseDiagnosticsPanel({ authAttempt }: SupabaseDiagnosticsPan
           </section>
 
           <div className="diagnostic-panel__actions">
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => void handleCopyDiagnostic()}
-            >
+            <SecondaryButton onClick={() => void handleCopyDiagnostic()}>
               Copier le diagnostic
-            </button>
-            <button
-              type="button"
-              className="ghost-button"
+            </SecondaryButton>
+            <GhostButton
               onClick={() => void handleResetCache()}
               disabled={resettingCache}
             >
               {resettingCache
                 ? "Réinitialisation..."
                 : "Réinitialiser le cache de l’application"}
-            </button>
+            </GhostButton>
           </div>
 
           {panelStatus ? (
@@ -319,8 +296,7 @@ export function SupabaseDiagnosticsPanel({ authAttempt }: SupabaseDiagnosticsPan
               {panelStatus}
             </p>
           ) : null}
-        </div>
-      </aside>
+      </DiagnosticPanel>
     </>
   );
 }

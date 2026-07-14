@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 import { SectionCard } from "../../components/SectionCard";
-import { StatCard } from "../../components/StatCard";
+import {
+  ActionCard,
+  EmptyState,
+  ListRow,
+  LoadingSkeleton,
+  ProgressBar,
+  StatusBadge
+} from "../../components/ui";
 import { supabase } from "../../lib/supabase";
 import type {
   BudgetStatusRow,
   DailyIntentionRow,
+  PrayerLogRow,
   ProjectRow,
   SoldeReelRow,
   TaskRow
@@ -16,6 +24,29 @@ interface DashboardSectionProps {
   timezone: string;
   refreshToken: number;
   onError: (message: string) => void;
+}
+
+const PRAYER_NAMES: PrayerLogRow["prayer_name"][] = ["fajr", "dhuhr", "asr", "maghrib", "isha"];
+
+const PRAYER_LABELS: Record<PrayerLogRow["prayer_name"], string> = {
+  fajr: "Fajr",
+  dhuhr: "Dhuhr",
+  asr: "Asr",
+  maghrib: "Maghrib",
+  isha: "Isha"
+};
+
+function prayerTone(status: PrayerLogRow["status"]) {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "late":
+      return "warning";
+    case "missed":
+      return "danger";
+    default:
+      return "default";
+  }
 }
 
 export function DashboardSection({
@@ -30,6 +61,7 @@ export function DashboardSection({
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [todayIntention, setTodayIntention] = useState<DailyIntentionRow | null>(null);
   const [budgetAlerts, setBudgetAlerts] = useState<BudgetStatusRow[]>([]);
+  const [prayers, setPrayers] = useState<PrayerLogRow[]>([]);
 
   useEffect(() => {
     if (!supabase) {
@@ -49,10 +81,11 @@ export function DashboardSection({
           { data: projectData, error: projectError },
           { data: taskData, error: taskError },
           { data: intentionData, error: intentionError },
-          { data: budgetData, error: budgetError }
+          { data: budgetData, error: budgetError },
+          { data: prayerData, error: prayerError }
         ] = await Promise.all([
           client.from("vue_solde_reel_disponible").select("*").order("currency"),
-          client.from("projects").select("*").order("updated_at", { ascending: false }),
+          client.from("projects").select("*").order("updated_at", { ascending: false }).limit(4),
           client
             .from("tasks")
             .select("*")
@@ -68,11 +101,26 @@ export function DashboardSection({
             .from("vue_budget_status")
             .select("*")
             .order("consumption_percentage", { ascending: false, nullsFirst: false })
-            .limit(4)
+            .limit(3),
+          client.from("prayer_logs").select("*").eq("prayer_date", today)
         ]);
 
-        if (balanceError ?? projectError ?? taskError ?? intentionError ?? budgetError) {
-          throw balanceError ?? projectError ?? taskError ?? intentionError ?? budgetError;
+        if (
+          balanceError ??
+          projectError ??
+          taskError ??
+          intentionError ??
+          budgetError ??
+          prayerError
+        ) {
+          throw (
+            balanceError ??
+            projectError ??
+            taskError ??
+            intentionError ??
+            budgetError ??
+            prayerError
+          );
         }
 
         if (!active) {
@@ -84,6 +132,7 @@ export function DashboardSection({
         setTasks((taskData as TaskRow[]) ?? []);
         setTodayIntention((intentionData as DailyIntentionRow | null) ?? null);
         setBudgetAlerts((budgetData as BudgetStatusRow[]) ?? []);
+        setPrayers((prayerData as PrayerLogRow[]) ?? []);
       } catch (error) {
         if (active) {
           onError(messageFromError(error));
@@ -102,123 +151,173 @@ export function DashboardSection({
     };
   }, [onError, refreshToken, timezone, userId]);
 
-  const activeProjects = projects.filter((project) =>
-    ["active", "preparation", "idea"].includes(project.status)
-  );
-  const blockedTasks = tasks.filter((task) => task.status === "blocked");
-  const upcomingTasks = tasks.slice(0, 4);
+  const prayerMap = new Map(prayers.map((entry) => [entry.prayer_name, entry.status]));
+  const priorityTasks = tasks.slice(0, 3);
+  const featuredProjects = projects.slice(0, 3);
+  const topBalance = balances[0] ?? null;
+  const topBudget = budgetAlerts[0] ?? null;
 
   return (
-    <div className="content-grid">
+    <div className="today-grid">
       <SectionCard
-        title="Vue d'ensemble"
-        subtitle="Un tableau de bord orienté décision, pas seulement un listing."
+        title="Intention du jour"
+        subtitle="La journée commence par un cap simple, lisible et concret."
       >
         {loading ? (
-          <p className="muted-copy">Chargement des indicateurs…</p>
+          <LoadingSkeleton lines={3} />
+        ) : todayIntention ? (
+          <ActionCard
+            title={todayIntention.intention}
+            description={`Enregistrée pour le ${formatDate(todayIntention.intention_date)}`}
+            meta={<StatusBadge tone="accent">En place</StatusBadge>}
+          />
         ) : (
-          <div className="stats-grid">
-            <StatCard
-              label="Projets en mouvement"
-              value={String(activeProjects.length)}
-              tone="accent"
-              hint="Idées, préparations et projets actifs."
-            />
-            <StatCard
-              label="Tâches prioritaires"
-              value={String(tasks.length)}
-              hint="Tâches non terminées actuellement visibles."
-            />
-            <StatCard
-              label="Blocages"
-              value={String(blockedTasks.length)}
-              tone={blockedTasks.length > 0 ? "alert" : "default"}
-              hint="Points à débloquer rapidement."
-            />
-            <StatCard
-              label="Intention du jour"
-              value={todayIntention ? "Rédigée" : "À écrire"}
-              hint={todayIntention?.intention ?? "Aucune intention enregistrée aujourd'hui."}
-            />
+          <EmptyState
+            title="Aucune intention enregistrée"
+            description="Rédige une intention claire pour donner une direction à la journée."
+          />
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title="Prière du jour"
+        subtitle="Un suivi simple, sans score ni surcharge."
+      >
+        {loading ? (
+          <LoadingSkeleton lines={5} />
+        ) : (
+          <div className="list-stack">
+            {PRAYER_NAMES.map((name) => {
+              const status = prayerMap.get(name) ?? "not_recorded";
+
+              return (
+                <ListRow
+                  key={name}
+                  title={PRAYER_LABELS[name]}
+                  description={
+                    status === "not_recorded"
+                      ? "Aucun statut enregistré pour l'instant."
+                      : `Statut ${status.replaceAll("_", " ")}`
+                  }
+                  aside={<StatusBadge tone={prayerTone(status)}>{status}</StatusBadge>}
+                />
+              );
+            })}
           </div>
         )}
       </SectionCard>
 
       <SectionCard
-        title="Solde réel disponible"
-        subtitle="Par devise, après déduction des sorties protégées."
+        title="Priorités du jour"
+        subtitle="Trois éléments maximum pour garder une vraie capacité d'action."
       >
-        {balances.length === 0 ? (
-          <p className="muted-copy">Aucun solde ou engagement protégé enregistré.</p>
+        {loading ? (
+          <LoadingSkeleton lines={3} />
+        ) : priorityTasks.length === 0 ? (
+          <EmptyState
+            title="Aucune priorité visible"
+            description="Crée une tâche ou reviens plus tard pour voir émerger l'essentiel."
+          />
         ) : (
           <div className="list-stack">
-            {balances.map((balance) => (
-              <article className="list-card" key={`${balance.user_id}-${balance.currency}`}>
-                <div>
-                  <h3>{balance.currency}</h3>
-                  <p>
-                    Solde courant {formatMoney(balance.current_balance, balance.currency)} · sorties
-                    protégées {formatMoney(balance.protected_outflows, balance.currency)}
-                  </p>
-                </div>
-                <strong className="accent-value">
-                  {formatMoney(balance.real_available_balance, balance.currency)}
-                </strong>
-              </article>
+            {priorityTasks.map((task) => (
+              <ListRow
+                key={task.id}
+                title={task.title}
+                description={`Échéance ${formatDate(task.due_date)} · score ${toNumber(
+                  task.priority_score
+                ).toFixed(2)}`}
+                meta={<StatusBadge tone={task.status === "blocked" ? "warning" : "default"}>{task.status}</StatusBadge>}
+              />
             ))}
           </div>
         )}
       </SectionCard>
 
       <SectionCard
-        title="Prochaines actions"
-        subtitle="Le lot de tâches qui mérite ton attention immédiate."
+        title="Projets à faire avancer"
+        subtitle="Deux ou trois chantiers lisibles, avec prochaine action et progression."
       >
-        {upcomingTasks.length === 0 ? (
-          <p className="muted-copy">Aucune tâche à venir.</p>
+        {loading ? (
+          <LoadingSkeleton lines={3} />
+        ) : featuredProjects.length === 0 ? (
+          <EmptyState
+            title="Aucun projet actif"
+            description="Les projets apparaîtront ici avec leur progression et leur prochaine étape."
+          />
         ) : (
           <div className="list-stack">
-            {upcomingTasks.map((task) => (
-              <article className="list-card" key={task.id}>
-                <div>
-                  <h3>{task.title}</h3>
-                  <p>
-                    Statut {task.status} · priorité {toNumber(task.priority_score).toFixed(2)} ·
-                    échéance {formatDate(task.due_date)}
-                  </p>
+            {featuredProjects.map((project) => (
+              <ActionCard
+                key={project.id}
+                title={project.title}
+                description={
+                  project.first_action_title
+                    ? `Prochaine action : ${project.first_action_title}`
+                    : "Première action à préciser"
+                }
+                meta={<StatusBadge tone={project.status === "active" ? "accent" : "default"}>{project.status}</StatusBadge>}
+              >
+                <div className="project-card__meta-row">
+                  <span>Échéance {formatDate(project.target_date)}</span>
+                  <span>
+                    Budget {formatMoney(project.estimated_budget, project.currency)}
+                  </span>
                 </div>
-              </article>
+                <ProgressBar value={project.progress} />
+              </ActionCard>
             ))}
           </div>
         )}
       </SectionCard>
 
       <SectionCard
-        title="Tension budgétaire"
-        subtitle="Les budgets les plus consommés remontent ici, sans plafonner le pourcentage."
+        title="Finances"
+        subtitle="Un résumé lisible du disponible réel et de la pression budgétaire."
       >
-        {budgetAlerts.length === 0 ? (
-          <p className="muted-copy">Aucun budget à surveiller pour le moment.</p>
+        {loading ? (
+          <LoadingSkeleton lines={3} />
         ) : (
-          <div className="list-stack">
-            {budgetAlerts.map((budget) => (
-              <article className="list-card" key={budget.budget_id}>
-                <div>
-                  <h3>
-                    Période {formatDate(budget.period_start)} → {formatDate(budget.period_end)}
-                  </h3>
-                  <p>
-                    Prévu {formatMoney(budget.planned_amount, budget.currency)} · restant{" "}
-                    {formatMoney(budget.remaining_amount, budget.currency)}
-                  </p>
+          <div className="today-finance-grid">
+            <ActionCard
+              title={topBalance ? formatMoney(topBalance.real_available_balance, topBalance.currency) : "—"}
+              description={
+                topBalance
+                  ? `Disponible réel en ${topBalance.currency}`
+                  : "Aucun solde ou engagement protégé enregistré."
+              }
+              meta={<StatusBadge tone="accent">Solde réel</StatusBadge>}
+            >
+              {topBalance ? (
+                <div className="project-card__meta-row">
+                  <span>Courant {formatMoney(topBalance.current_balance, topBalance.currency)}</span>
+                  <span>
+                    Protégé {formatMoney(topBalance.protected_outflows, topBalance.currency)}
+                  </span>
                 </div>
-                <strong className="accent-value">
-                  {budget.consumption_percentage === null
-                    ? "—"
-                    : `${toNumber(budget.consumption_percentage).toFixed(2)} %`}
-                </strong>
-              </article>
-            ))}
+              ) : null}
+            </ActionCard>
+
+            <ActionCard
+              title={
+                topBudget?.consumption_percentage == null
+                  ? "Aucun budget"
+                  : `${toNumber(topBudget.consumption_percentage).toFixed(0)} %`
+              }
+              description={
+                topBudget
+                  ? `Reste ${formatMoney(topBudget.remaining_amount, topBudget.currency)}`
+                  : "Crée une enveloppe pour suivre les dépenses du mois."
+              }
+              meta={<StatusBadge tone="success">Budget</StatusBadge>}
+            >
+              {topBudget ? (
+                <div className="project-card__meta-row">
+                  <span>Prévu {formatMoney(topBudget.planned_amount, topBudget.currency)}</span>
+                  <span>Engagé {formatMoney(topBudget.committed_amount, topBudget.currency)}</span>
+                </div>
+              ) : null}
+            </ActionCard>
           </div>
         )}
       </SectionCard>

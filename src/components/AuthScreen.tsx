@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { resolveSupabaseEndpoint, supabase } from "../lib/supabase";
 import type { AuthAttemptDiagnostic, NoticeState, SupabaseDiagnosticCategory } from "../lib/types";
 import { messageFromError } from "../lib/utils";
+import { Card, FormField, GhostButton, PrimaryButton, SegmentedControl } from "./ui";
 
 interface AuthScreenProps {
   passwordRecovery?: boolean;
@@ -369,132 +370,147 @@ export function AuthScreen({
   return (
     <main className="auth-screen">
       <div className="auth-screen__backdrop" />
-      <section className="auth-panel fade-up">
-        <p className="auth-panel__kicker">Niyya -&gt; Jëf -&gt; Tekki</p>
-        <h1>M.T JËF</h1>
-        <p className="auth-panel__intro">
-          Un cockpit personnel pour transformer l'intention en action suivie,
-          puis en accomplissement concret.
-        </p>
-
-        {notice ? (
-          <div className={`notice-banner notice-banner--${notice.kind}`}>
-            {notice.message}
+      <section className="auth-layout fade-up">
+        <Card className="auth-hero-card" tone="accent">
+          <p className="auth-panel__kicker">Niyya → Jëf → Tekki</p>
+          <h1>M.T JËF</h1>
+          <p className="auth-panel__intro">
+            Un espace personnel mobile-first pour clarifier l'intention, organiser l'action et
+            suivre l'accomplissement sans surcharge.
+          </p>
+          <div className="auth-hero-card__grid" aria-label="Promesses de l'application">
+            <article>
+              <strong>Intention</strong>
+              <p>Un centre quotidien simple pour savoir quoi faire aujourd'hui.</p>
+            </article>
+            <article>
+              <strong>Action</strong>
+              <p>Projets, tâches et finances réunis dans une lecture claire.</p>
+            </article>
+            <article>
+              <strong>Accomplissement</strong>
+              <p>Revue du soir, ancrage spirituel et progression durable.</p>
+            </article>
           </div>
-        ) : null}
+        </Card>
 
-        {!passwordRecovery ? (
-          <div className="segmented-control">
-            <button
-              type="button"
-              className={mode === "signin" ? "is-active" : ""}
-              onClick={() => setMode("signin")}
-            >
-              Se connecter
-            </button>
-            <button
-              type="button"
-              className={mode === "signup" ? "is-active" : ""}
-              onClick={() => setMode("signup")}
-            >
-              Creer un compte
-            </button>
+        <Card className="auth-panel">
+          <div className="auth-panel__header">
+            <div>
+              <p className="auth-panel__kicker">
+                {passwordRecovery ? "Recuperation" : "Espace personnel"}
+              </p>
+              <h2>{passwordRecovery ? "Definir un nouveau mot de passe" : "Acceder a l'application"}</h2>
+              <p className="auth-panel__intro">
+                Une experience sobre, claire et adaptee a l'iPhone comme au bureau.
+              </p>
+            </div>
           </div>
-        ) : null}
 
-        <form className="stack-form" onSubmit={handleSubmit}>
-          {passwordRecovery ? (
-            <>
-              <label>
-                <span>Nouveau mot de passe</span>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="••••••••"
-                  minLength={8}
-                  required
-                />
-              </label>
+          {notice ? (
+            <div className={`notice-banner notice-banner--${notice.kind}`}>
+              {notice.message}
+            </div>
+          ) : null}
 
-              <label>
-                <span>Confirmation du mot de passe</span>
-                <input
-                  type="password"
-                  value={passwordConfirm}
-                  onChange={(event) => setPasswordConfirm(event.target.value)}
-                  placeholder="••••••••"
-                  minLength={8}
-                  required
-                />
-              </label>
-            </>
-          ) : (
-            <>
-              {mode === "signup" ? (
-                <div className="grid-two">
-                  <label>
-                    <span>Prenom</span>
-                    <input
-                      value={firstName}
-                      onChange={(event) => setFirstName(event.target.value)}
-                      placeholder="Moussa"
-                    />
-                  </label>
-                  <label>
-                    <span>Nom</span>
-                    <input
-                      value={lastName}
-                      onChange={(event) => setLastName(event.target.value)}
-                      placeholder="Jef"
-                    />
-                  </label>
-                </div>
-              ) : null}
+          {!passwordRecovery ? (
+            <SegmentedControl
+              ariaLabel="Mode d'authentification"
+              value={mode === "forgot" ? "signin" : mode}
+              onChange={(value) => setMode(value)}
+              options={[
+                { label: "Se connecter", value: "signin" },
+                { label: "Creer un compte", value: "signup" }
+              ]}
+            />
+          ) : null}
 
-              <label>
-                <span>Email</span>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="toi@example.com"
-                  autoComplete="email"
-                  required
-                />
-              </label>
-
-              {mode !== "forgot" ? (
-                <label>
-                  <span>Mot de passe</span>
+          <form className="stack-form" onSubmit={handleSubmit}>
+            {passwordRecovery ? (
+              <>
+                <FormField label="Nouveau mot de passe">
                   <input
                     type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="••••••••"
-                    autoComplete={mode === "signin" ? "current-password" : "new-password"}
                     minLength={8}
                     required
                   />
-                </label>
-              ) : null}
-            </>
-          )}
+                </FormField>
 
-          <button type="submit" className="primary-button" disabled={loading}>
-            {submitLabel}
-          </button>
+                <FormField label="Confirmation du mot de passe">
+                  <input
+                    type="password"
+                    value={passwordConfirm}
+                    onChange={(event) => setPasswordConfirm(event.target.value)}
+                    placeholder="••••••••"
+                    minLength={8}
+                    required
+                  />
+                </FormField>
+              </>
+            ) : (
+              <>
+                {mode === "signup" ? (
+                  <div className="grid-two">
+                    <FormField label="Prenom">
+                      <input
+                        value={firstName}
+                        onChange={(event) => setFirstName(event.target.value)}
+                        placeholder="Moussa"
+                      />
+                    </FormField>
+                    <FormField label="Nom">
+                      <input
+                        value={lastName}
+                        onChange={(event) => setLastName(event.target.value)}
+                        placeholder="Jef"
+                      />
+                    </FormField>
+                  </div>
+                ) : null}
 
-          {!passwordRecovery ? (
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => setMode((current) => (current === "forgot" ? "signin" : "forgot"))}
-            >
-              {mode === "forgot" ? "Retour a la connexion" : "Mot de passe oublie"}
-            </button>
-          ) : null}
-        </form>
+                <FormField label="Email">
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="toi@example.com"
+                    autoComplete="email"
+                    required
+                  />
+                </FormField>
+
+                {mode !== "forgot" ? (
+                  <FormField label="Mot de passe">
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="••••••••"
+                      autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                      minLength={8}
+                      required
+                    />
+                  </FormField>
+                ) : null}
+              </>
+            )}
+
+            <PrimaryButton type="submit" disabled={loading}>
+              {submitLabel}
+            </PrimaryButton>
+
+            {!passwordRecovery ? (
+              <GhostButton
+                onClick={() => setMode((current) => (current === "forgot" ? "signin" : "forgot"))}
+              >
+                {mode === "forgot" ? "Retour a la connexion" : "Mot de passe oublie"}
+              </GhostButton>
+            ) : null}
+          </form>
+        </Card>
       </section>
     </main>
   );

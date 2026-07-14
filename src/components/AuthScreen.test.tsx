@@ -13,7 +13,7 @@ const authMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/supabase", () => ({
-  resolveSupabaseEndpoint: (path: string) => `https://drimjckdwelctdytxrxz.supabase.co${path}`,
+  resolveSupabaseEndpoint: (path: string) => `https://drimjcxdwetlctdtyxtz.supabase.co${path}`,
   supabase: {
     auth: {
       signInWithPassword: authMocks.signInWithPassword,
@@ -54,7 +54,7 @@ describe("AuthScreen", () => {
 
     render(<AuthScreenHarness />);
 
-    await user.click(screen.getByRole("button", { name: "Creer un compte" }));
+    await user.click(screen.getByRole("tab", { name: "Creer un compte" }));
     await user.type(screen.getByLabelText("Prenom"), "  Moussa  ");
     await user.type(screen.getByLabelText("Nom"), "  Jef  ");
     await user.type(screen.getByLabelText("Email"), "  TEST.USER@YOPMAIL.COM  ");
@@ -107,7 +107,7 @@ describe("AuthScreen", () => {
 
     render(<AuthScreenHarness />);
 
-    await user.click(screen.getByRole("button", { name: "Creer un compte" }));
+    await user.click(screen.getByRole("tab", { name: "Creer un compte" }));
     await user.type(screen.getByLabelText("Email"), "existing@yopmail.com");
     await user.type(screen.getByLabelText("Mot de passe"), "MotDePasse123!");
     await user.click(screen.getByRole("button", { name: "Creer mon espace" }));
@@ -137,7 +137,7 @@ describe("AuthScreen", () => {
 
     render(<AuthScreenHarness />);
 
-    await user.click(screen.getByRole("button", { name: "Creer un compte" }));
+    await user.click(screen.getByRole("tab", { name: "Creer un compte" }));
     await user.type(screen.getByLabelText("Email"), "loading@yopmail.com");
     await user.type(screen.getByLabelText("Mot de passe"), "MotDePasse123!");
     await user.click(screen.getByRole("button", { name: "Creer mon espace" }));

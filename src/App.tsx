@@ -3,7 +3,12 @@ import { AuthScreen } from "./components/AuthScreen";
 import { AppShell } from "./components/AppShell";
 import { SupabaseDiagnosticsPanel } from "./features/diagnostics/SupabaseDiagnosticsPanel";
 import { supabase, isSupabaseConfigured, supabaseConfigError } from "./lib/supabase";
-import type { AuthAttemptDiagnostic, NoticeState, ProfileRow, SectionDefinition } from "./lib/types";
+import type {
+  AuthAttemptDiagnostic,
+  NoticeState,
+  ProfileRow,
+  SectionDefinition
+} from "./lib/types";
 import { messageFromError } from "./lib/utils";
 import { useAuthSession } from "./hooks/useAuthSession";
 import { DashboardSection } from "./features/dashboard/DashboardSection";
@@ -16,14 +21,14 @@ import { SpiritualSection } from "./features/spiritual/SpiritualSection";
 import { DailyReviewSection } from "./features/review/DailyReviewSection";
 
 const SECTIONS: SectionDefinition[] = [
-  { id: "dashboard", label: "Cockpit", kicker: "Vue d'ensemble" },
-  { id: "intention", label: "Niyya", kicker: "Intention du jour" },
+  { id: "dashboard", label: "Aujourd'hui", kicker: "Vue centrale" },
+  { id: "intention", label: "Intention", kicker: "Niyya" },
   { id: "family", label: "Famille", kicker: "Lien & rappels" },
   { id: "projects", label: "Projets", kicker: "Cap & étapes" },
   { id: "tasks", label: "Tâches", kicker: "Action immédiate" },
   { id: "finances", label: "Finances", kicker: "Flux & budgets" },
   { id: "spiritual", label: "Prières", kicker: "Ancrage" },
-  { id: "review", label: "Tekki", kicker: "Revue du soir" }
+  { id: "review", label: "Revue", kicker: "Tekki" }
 ];
 
 export default function App() {

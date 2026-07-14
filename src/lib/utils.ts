@@ -175,6 +175,47 @@ export function messageFromError(error: unknown): string {
     const message = "message" in error ? String(error.message) : null;
     const code = "code" in error ? String(error.code) : null;
     const status = "status" in error ? Number(error.status) : null;
+    const assistantError = "error" in error ? String(error.error) : null;
+
+    if (assistantError === "gemini_missing_api_key") {
+      return "La clé Gemini n'est pas configurée côté serveur.";
+    }
+
+    if (assistantError === "gemini_missing_model") {
+      return "Le modèle Gemini n'est pas configuré côté serveur.";
+    }
+
+    if (assistantError === "gemini_invalid_key") {
+      return "La clé Gemini configurée est invalide.";
+    }
+
+    if (assistantError === "gemini_model_unavailable") {
+      return "Le modèle Gemini configuré n'est pas disponible.";
+    }
+
+    if (assistantError === "gemini_quota_exceeded") {
+      return "Le quota Gemini est temporairement atteint.";
+    }
+
+    if (assistantError === "gemini_access_denied") {
+      return "L'accès au service Gemini est refusé pour cette configuration.";
+    }
+
+    if (assistantError === "gemini_bad_request") {
+      return "La requête envoyée à Gemini a été refusée.";
+    }
+
+    if (assistantError === "gemini_network_error") {
+      return "Le service Gemini est actuellement inaccessible depuis la fonction.";
+    }
+
+    if (assistantError === "gemini_invalid_json") {
+      return "La réponse Gemini est invalide.";
+    }
+
+    if (assistantError === "gemini_blocked") {
+      return "La réponse Gemini a été bloquée par les filtres de sécurité.";
+    }
 
     if (code === "23505") {
       return "Cette valeur existe deja ou viole une regle d'unicite.";
