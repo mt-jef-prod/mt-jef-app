@@ -1,6 +1,11 @@
 /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 
-import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2.110.2";
+import {
+  buildGeminiRequest,
+  extractGeminiReply,
+  normalizeGeminiFailure
+} from "./gemini.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,15 +14,16 @@ const corsHeaders = {
   "Content-Type": "application/json; charset=utf-8"
 } as const;
 
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-4.1-mini";
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
+const SUPABASE_JS_VERSION = "2.110.2";
 
 const MAX_MESSAGE_LENGTH = 1_500;
 const MAX_HISTORY_ITEMS = 8;
 const MAX_HISTORY_MESSAGE_LENGTH = 800;
-const MAX_OUTPUT_TOKENS = 700;
+const MAX_OUTPUT_TOKENS = 1200;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 8;
 
@@ -76,6 +82,63 @@ function jsonResponse(status: number, body: Record<string, unknown>) {
     status,
     headers: corsHeaders
   });
+}
+
+function normalizeSupabaseHost(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value).host;
+  } catch {
+    return null;
+  }
+}
+
+function truncateText(value: string, maxLength: number) {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength - 3)}...`;
+}
+
+function getErrorDetails(error: unknown) {
+  if (error instanceof Error) {
+    return sanitizeValue({
+      name: error.name,
+      message: error.message,
+      stack: error.stack ? truncateText(error.stack, 1_200) : null
+    });
+  }
+
+  if (error && typeof error === "object") {
+    return sanitizeValue(error);
+  }
+
+  return { message: String(error) };
+}
+
+function logEvent(
+  level: "info" | "warn" | "error",
+  event: string,
+  details: Record<string, unknown> = {}
+) {
+  const payload = sanitizeValue(details);
+  const line = `[mt-jef-assistant] ${event}`;
+
+  if (level === "error") {
+    console.error(line, payload);
+    return;
+  }
+
+  if (level === "warn") {
+    console.warn(line, payload);
+    return;
+  }
+
+  console.info(line, payload);
 }
 
 function pruneRateLimitBuckets(now: number) {
@@ -559,21 +622,86 @@ function extractOutputText(payload: unknown): string {
 }
 
 Deno.serve(async (request) => {
+  const requestId = crypto.randomUUID();
+  const startedAt = Date.now();
+  const requestUrl = new URL(request.url);
+
+  logEvent("info", "request:start", {
+    requestId,
+    method: request.method,
+    pathname: requestUrl.pathname,
+    supabaseHost: normalizeSupabaseHost(SUPABASE_URL),
+    hasGeminiApiKey: Boolean(GEMINI_API_KEY),
+    hasGeminiModel: Boolean(GEMINI_MODEL),
+    hasSupabaseUrl: Boolean(SUPABASE_URL),
+    hasSupabaseAnonKey: Boolean(SUPABASE_ANON_KEY),
+    geminiModel: GEMINI_MODEL ?? null,
+    supabaseJsVersion: SUPABASE_JS_VERSION
+  });
+
   if (request.method === "OPTIONS") {
+    logEvent("info", "request:options", {
+      requestId,
+      durationMs: Date.now() - startedAt
+    });
     return new Response("ok", { headers: corsHeaders });
   }
 
   if (request.method !== "POST") {
+    logEvent("warn", "request:invalid_method", {
+      requestId,
+      method: request.method,
+      durationMs: Date.now() - startedAt
+    });
     return jsonResponse(405, { error: "METHOD_NOT_ALLOWED" });
   }
 
-  if (!OPENAI_API_KEY || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    logEvent("error", "request:misconfigured", {
+      requestId,
+      hasSupabaseUrl: Boolean(SUPABASE_URL),
+      hasSupabaseAnonKey: Boolean(SUPABASE_ANON_KEY),
+      durationMs: Date.now() - startedAt
+    });
     return jsonResponse(500, { error: "SERVER_MISCONFIGURED" });
+  }
+
+  if (!GEMINI_API_KEY) {
+    logEvent("error", "gemini:misconfigured", {
+      requestId,
+      hasGeminiApiKey: false,
+      hasGeminiModel: Boolean(GEMINI_MODEL),
+      durationMs: Date.now() - startedAt
+    });
+
+    return jsonResponse(500, {
+      error: "gemini_missing_api_key",
+      message: "La clé Gemini n'est pas configurée côté serveur."
+    });
+  }
+
+  if (!GEMINI_MODEL) {
+    logEvent("error", "gemini:misconfigured", {
+      requestId,
+      hasGeminiApiKey: true,
+      hasGeminiModel: false,
+      durationMs: Date.now() - startedAt
+    });
+
+    return jsonResponse(500, {
+      error: "gemini_missing_model",
+      message: "Le modèle Gemini n'est pas configuré côté serveur."
+    });
   }
 
   const authHeader = request.headers.get("Authorization");
 
   if (!authHeader?.startsWith("Bearer ")) {
+    logEvent("warn", "auth:missing_header", {
+      requestId,
+      hasAuthorizationHeader: Boolean(authHeader),
+      durationMs: Date.now() - startedAt
+    });
     return jsonResponse(401, { error: "UNAUTHORIZED" });
   }
 
@@ -585,25 +713,73 @@ Deno.serve(async (request) => {
     }
   });
 
-  const {
-    data: { user },
-    error: authError
-  } = await authClient.auth.getUser(token);
+  let user: { id: string } | null = null;
 
-  if (authError || !user) {
-    return jsonResponse(401, { error: "INVALID_SESSION" });
+  try {
+    const {
+      data: { user: resolvedUser },
+      error: authError
+    } = await authClient.auth.getUser(token);
+
+    if (authError || !resolvedUser) {
+      logEvent("warn", "auth:invalid_session", {
+        requestId,
+        error: authError ? getErrorDetails(authError) : null,
+        durationMs: Date.now() - startedAt
+      });
+      return jsonResponse(401, { error: "INVALID_SESSION" });
+    }
+
+    user = { id: resolvedUser.id };
+    logEvent("info", "auth:validated", {
+      requestId,
+      userId: user.id,
+      durationMs: Date.now() - startedAt
+    });
+  } catch (error) {
+    logEvent("error", "auth:verification_failed", {
+      requestId,
+      error: getErrorDetails(error),
+      durationMs: Date.now() - startedAt
+    });
+    return jsonResponse(500, {
+      error: "AUTH_VERIFICATION_FAILED",
+      message: "La verification de la session a echoue."
+    });
+  }
+
+  if (!user) {
+    logEvent("error", "auth:missing_user_after_verification", {
+      requestId,
+      durationMs: Date.now() - startedAt
+    });
+    return jsonResponse(500, {
+      error: "AUTH_USER_MISSING",
+      message: "La session utilisateur n'a pas pu etre resolue."
+    });
   }
 
   try {
     enforceRateLimit(user.id);
   } catch (error) {
     if (error instanceof Error && error.message === "RATE_LIMIT_EXCEEDED") {
+      logEvent("warn", "rate_limit:exceeded", {
+        requestId,
+        userId: user.id,
+        durationMs: Date.now() - startedAt
+      });
       return jsonResponse(429, {
         error: "RATE_LIMIT_EXCEEDED",
         message: "Trop de requêtes. Attendez environ une minute avant de réessayer."
       });
     }
 
+    logEvent("error", "rate_limit:failure", {
+      requestId,
+      userId: user.id,
+      error: getErrorDetails(error),
+      durationMs: Date.now() - startedAt
+    });
     return jsonResponse(500, { error: "RATE_LIMIT_FAILURE" });
   }
 
@@ -611,17 +787,40 @@ Deno.serve(async (request) => {
 
   try {
     body = (await request.json()) as AssistantRequest;
-  } catch {
+  } catch (error) {
+    logEvent("warn", "request:invalid_json", {
+      requestId,
+      userId: user.id,
+      error: getErrorDetails(error),
+      durationMs: Date.now() - startedAt
+    });
     return jsonResponse(400, { error: "INVALID_JSON" });
   }
 
-  const message = typeof body.message === "string" ? sanitizeText(body.message, MAX_MESSAGE_LENGTH) : "";
+  const message =
+    typeof body.message === "string" ? sanitizeText(body.message, MAX_MESSAGE_LENGTH) : "";
 
   if (!message) {
+    logEvent("warn", "request:missing_message", {
+      requestId,
+      userId: user.id,
+      durationMs: Date.now() - startedAt
+    });
     return jsonResponse(400, { error: "MESSAGE_REQUIRED" });
   }
 
-  if (body.message && typeof body.message === "string" && body.message.trim().length > MAX_MESSAGE_LENGTH) {
+  if (
+    body.message &&
+    typeof body.message === "string" &&
+    body.message.trim().length > MAX_MESSAGE_LENGTH
+  ) {
+    logEvent("warn", "request:message_too_long", {
+      requestId,
+      userId: user.id,
+      providedLength: body.message.trim().length,
+      maxLength: MAX_MESSAGE_LENGTH,
+      durationMs: Date.now() - startedAt
+    });
     return jsonResponse(413, {
       error: "MESSAGE_TOO_LONG",
       message: `Le message dépasse la limite de ${MAX_MESSAGE_LENGTH} caractères.`
@@ -645,52 +844,195 @@ Deno.serve(async (request) => {
   });
 
   const domains = detectDomains(message);
-  const context = await collectContext(db, domains, timezone);
-  const input = buildPrompt({
-    message,
-    history,
-    context,
-    firstName,
-    timezone
+  const historyLength = history.length;
+
+  logEvent("info", "request:accepted", {
+    requestId,
+    userId: user.id,
+    messageLength: message.length,
+    historyLength,
+    timezone,
+    domains,
+    durationMs: Date.now() - startedAt
   });
 
-  const openAiResponse = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENAI_API_KEY}`
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      store: false,
-      max_output_tokens: MAX_OUTPUT_TOKENS,
-      instructions: SYSTEM_PROMPT,
-      input
-    })
-  });
+  try {
+    const context = await collectContext(db, domains, timezone);
 
-  if (!openAiResponse.ok) {
-    let providerMessage = "OPENAI_UPSTREAM_ERROR";
+    logEvent("info", "context:loaded", {
+      requestId,
+      userId: user.id,
+      warnings: context.warnings,
+      counts: {
+        projects: context.projects?.length ?? 0,
+        project_steps: context.project_steps?.length ?? 0,
+        tasks: context.tasks?.length ?? 0,
+        finances: context.finances?.length ?? 0,
+        balances: context.balances?.length ?? 0,
+        budgets: context.budgets?.length ?? 0
+      },
+      durationMs: Date.now() - startedAt
+    });
+
+    const input = buildPrompt({
+      message,
+      history,
+      context,
+      firstName,
+      timezone
+    });
+
+    logEvent("info", "gemini:request:start", {
+      requestId,
+      userId: user.id,
+      model: GEMINI_MODEL,
+      inputLength: input.length,
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+      durationMs: Date.now() - startedAt
+    });
+
+    let geminiResponse: Response;
 
     try {
-      const errorBody = (await openAiResponse.json()) as { error?: { message?: string } };
-      providerMessage = errorBody.error?.message || providerMessage;
-    } catch {
-      providerMessage = "OPENAI_UPSTREAM_ERROR";
+      geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+          GEMINI_MODEL
+        )}:generateContent`,
+        {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": GEMINI_API_KEY
+        },
+        body: JSON.stringify(
+          buildGeminiRequest({
+            systemInstruction: SYSTEM_PROMPT,
+            prompt: input,
+            temperature: 0.4,
+            maxOutputTokens: MAX_OUTPUT_TOKENS
+          })
+        )
+      }
+      );
+    } catch (error) {
+      logEvent("error", "gemini:request:network_error", {
+        requestId,
+        userId: user.id,
+        error: getErrorDetails(error),
+        durationMs: Date.now() - startedAt
+      });
+      return jsonResponse(502, {
+        error: "gemini_network_error",
+        message: "Le service Gemini est actuellement inaccessible depuis la fonction."
+      });
     }
 
-    return jsonResponse(502, {
-      error: "OPENAI_REQUEST_FAILED",
-      message: providerMessage
+    if (!geminiResponse.ok) {
+      const rawBody = await geminiResponse.text();
+      const failure = normalizeGeminiFailure(geminiResponse.status, rawBody);
+
+      logEvent("error", "gemini:response:error", {
+        requestId,
+        userId: user.id,
+        status: geminiResponse.status,
+        statusText: geminiResponse.statusText,
+        providerCode: failure.provider.providerCode,
+        providerStatus: failure.provider.providerStatus,
+        providerDetails: failure.provider.providerDetails,
+        geminiRequestId:
+          geminiResponse.headers.get("x-request-id") ||
+          geminiResponse.headers.get("request-id") ||
+          null,
+        providerMessage: failure.provider.providerMessage,
+        bodyPreview: truncateText(rawBody, 900),
+        durationMs: Date.now() - startedAt
+      });
+
+      return jsonResponse(502, {
+        error: failure.error,
+        message: failure.message
+      });
+    }
+
+    let payload: unknown;
+
+    try {
+      payload = await geminiResponse.json();
+    } catch (error) {
+      logEvent("error", "gemini:response:error", {
+        requestId,
+        userId: user.id,
+        status: geminiResponse.status,
+        statusText: geminiResponse.statusText,
+        error: getErrorDetails(error),
+        durationMs: Date.now() - startedAt
+      });
+
+      return jsonResponse(502, {
+        error: "gemini_invalid_json",
+        message: "La réponse Gemini est invalide."
+      });
+    }
+
+    const result = extractGeminiReply(payload);
+
+    if (result.status === "blocked") {
+      logEvent("warn", "gemini:response:blocked", {
+        requestId,
+        userId: user.id,
+        status: geminiResponse.status,
+        blockReason: result.blockReason,
+        finishReason: result.finishReason,
+        durationMs: Date.now() - startedAt
+      });
+
+      return jsonResponse(502, {
+        error: "gemini_blocked",
+        message: "La réponse Gemini a été bloquée par les filtres de sécurité."
+      });
+    }
+
+    if (result.status === "empty") {
+      logEvent("warn", "gemini:response:empty", {
+        requestId,
+        userId: user.id,
+        status: geminiResponse.status,
+        finishReason: result.finishReason,
+        durationMs: Date.now() - startedAt
+      });
+
+      return jsonResponse(200, {
+        reply: "",
+        sources: domains,
+        warnings: context.warnings
+      });
+    }
+
+    logEvent("info", "gemini:response:success", {
+      requestId,
+      userId: user.id,
+      status: geminiResponse.status,
+      replyLength: result.reply.length,
+      finishReason: result.finishReason,
+      durationMs: Date.now() - startedAt
+    });
+
+    return jsonResponse(200, {
+      reply: result.reply,
+      sources: domains,
+      warnings: context.warnings
+    });
+  } catch (error) {
+    logEvent("error", "request:unhandled_error", {
+      requestId,
+      userId: user.id,
+      error: getErrorDetails(error),
+      durationMs: Date.now() - startedAt
+    });
+
+    return jsonResponse(500, {
+      error: "ASSISTANT_HANDLER_FAILED",
+      message: "Le traitement de la demande a echoue."
     });
   }
-
-  const payload = await openAiResponse.json();
-  const reply = extractOutputText(payload);
-
-  return jsonResponse(200, {
-    reply,
-    sources: domains,
-    warnings: context.warnings
-  });
 });

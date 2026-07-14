@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@supabase/supabase-js':
-        specifier: latest
+        specifier: 2.110.2
         version: 2.110.2
       react:
         specifier: latest

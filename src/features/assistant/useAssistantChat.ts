@@ -5,7 +5,7 @@ import type {
   AssistantHistoryItem,
   AssistantMessage
 } from "../../lib/types";
-import { messageFromError } from "../../lib/utils";
+import { resolveAssistantErrorMessage } from "./assistantErrors";
 
 const MAX_MESSAGE_LENGTH = 1_500;
 const MAX_HISTORY_ITEMS = 8;
@@ -103,7 +103,7 @@ export function useAssistantChat({ timezone, firstName }: UseAssistantChatOption
         }
       ]);
     } catch (assistantError) {
-      setError(messageFromError(assistantError));
+      setError(await resolveAssistantErrorMessage(assistantError));
     } finally {
       setSending(false);
     }
