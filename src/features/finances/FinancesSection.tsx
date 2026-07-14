@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { SectionCard } from "../../components/SectionCard";
+import { MetricCard } from "../../components/ui";
 import { supabase } from "../../lib/supabase";
 import type {
   AccountBalanceRow,
@@ -401,16 +402,16 @@ export function FinancesSection({
         ) : (
           <div className="stats-grid">
             {balanceView.map((row) => (
-              <SectionCard
+              <MetricCard
                 key={`${row.user_id}-${row.currency}`}
-                title={row.currency}
-                subtitle={`Protégé ${formatMoney(row.protected_outflows, row.currency)}`}
-              >
-                <div className="inline-metrics">
-                  <strong>{formatMoney(row.real_available_balance, row.currency)}</strong>
-                  <span>Solde courant {formatMoney(row.current_balance, row.currency)}</span>
-                </div>
-              </SectionCard>
+                label={`Disponible réel · ${row.currency}`}
+                value={formatMoney(row.real_available_balance, row.currency)}
+                hint={`Courant ${formatMoney(row.current_balance, row.currency)} · Protégé ${formatMoney(
+                  row.protected_outflows,
+                  row.currency
+                )}`}
+                tone="accent"
+              />
             ))}
           </div>
         )}
