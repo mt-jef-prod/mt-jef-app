@@ -217,6 +217,14 @@ export function messageFromError(error: unknown): string {
       return "La réponse Gemini a été bloquée par les filtres de sécurité.";
     }
 
+    if (assistantError === "coach_invalid_response") {
+      return "La réponse structurée du coach est invalide.";
+    }
+
+    if (assistantError === "COACH_CONTEXT_REQUIRED") {
+      return "Le contexte minimal du coach est invalide ou incomplet.";
+    }
+
     if (code === "23505") {
       return "Cette valeur existe deja ou viole une regle d'unicite.";
     }

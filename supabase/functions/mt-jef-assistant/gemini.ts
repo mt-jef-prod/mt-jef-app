@@ -13,6 +13,7 @@ export interface GeminiRequestPayload {
   generationConfig: {
     temperature: number;
     maxOutputTokens: number;
+    responseMimeType?: string;
   };
 }
 
@@ -92,6 +93,7 @@ export function buildGeminiRequest(args: {
   prompt: string;
   temperature?: number;
   maxOutputTokens?: number;
+  responseMimeType?: string;
 }): GeminiRequestPayload {
   return {
     system_instruction: {
@@ -105,7 +107,8 @@ export function buildGeminiRequest(args: {
     ],
     generationConfig: {
       temperature: args.temperature ?? 0.4,
-      maxOutputTokens: args.maxOutputTokens ?? 1200
+      maxOutputTokens: args.maxOutputTokens ?? 1200,
+      ...(args.responseMimeType ? { responseMimeType: args.responseMimeType } : {})
     }
   };
 }

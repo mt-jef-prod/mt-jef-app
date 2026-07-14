@@ -252,6 +252,112 @@ export interface BudgetStatusRow {
 }
 
 export type AssistantRole = "user" | "assistant";
+export type AssistantFunctionMode = "assistant" | "coach";
+
+export type CoachSignalCode =
+  | "missing_data"
+  | "stalled_goal"
+  | "repeated_postponement"
+  | "no_next_action"
+  | "overload"
+  | "financial_pressure"
+  | "fatigue"
+  | "irregularity"
+  | "lack_of_clarity";
+
+export type CoachSignalSeverity = "info" | "warning" | "alert";
+export type CoachObjectiveType = "day" | "task" | "project";
+
+export interface CoachObjective {
+  type: CoachObjectiveType;
+  title: string;
+  status: string | null;
+  deadline: string | null;
+  next_action_title?: string | null;
+}
+
+export interface CoachSignal {
+  code: CoachSignalCode;
+  severity: CoachSignalSeverity;
+  title: string;
+  evidence: string;
+  question: string;
+  objective: CoachObjective | null;
+}
+
+export interface CoachDailySnapshot {
+  intention: string | null;
+  planned_task_count: number;
+  completed_task_count: number;
+  overdue_task_count: number;
+  active_project_count: number;
+  prayer_completion_rate: number | null;
+  planned_expenses: Array<{
+    currency: string;
+    amount: number;
+  }>;
+  actual_expenses: Array<{
+    currency: string;
+    amount: number;
+  }>;
+  mood: number | null;
+  energy: number | null;
+  review_completed: boolean;
+  blockers_logged: boolean;
+}
+
+export interface CoachWeeklySnapshot {
+  advanced_objectives: string[];
+  blocked_objectives: string[];
+  regular_habits: string[];
+  main_obstacles: string[];
+  recommended_priorities: string[];
+  consistency_score: number;
+}
+
+export interface CoachInsightReport {
+  generated_at: string;
+  objective: CoachObjective | null;
+  primary_signal: CoachSignal | null;
+  signals: CoachSignal[];
+  daily_snapshot: CoachDailySnapshot;
+  weekly_snapshot: CoachWeeklySnapshot;
+  warnings: string[];
+}
+
+export interface CoachNextAction {
+  title: string;
+  duration_minutes: number;
+  suggested_time: string;
+  difficulty: "low" | "medium" | "high";
+  best_moment: string | null;
+  reminder_hint: string | null;
+}
+
+export interface CoachStructuredResponse {
+  summary: string;
+  question: string;
+  likely_blocker: string;
+  strategy: string;
+  next_action: CoachNextAction;
+}
+
+export interface CoachHistoryEntry extends CoachStructuredResponse {
+  id: string;
+  created_at: string;
+  source_signal_code: CoachSignalCode | null;
+  objective_title: string | null;
+  user_response: string | null;
+}
+
+export interface CoachRequestPayload {
+  mode: "coach";
+  message: string;
+  history: AssistantHistoryItem[];
+  timezone: string;
+  firstName: string | null;
+  coachContext: CoachInsightReport;
+}
 
 export interface AssistantMessage {
   id: string;
@@ -267,9 +373,11 @@ export interface AssistantHistoryItem {
 }
 
 export interface AssistantFunctionResponse {
+  mode?: AssistantFunctionMode;
   reply: string;
   sources: string[];
   warnings: string[];
+  coach?: CoachStructuredResponse | null;
 }
 
 export interface SupabaseNetworkDiagnostic {

@@ -12,7 +12,9 @@ const GEMINI_ERROR_MESSAGES: Record<string, string> = {
   gemini_network_error: "Le service Gemini est actuellement inaccessible depuis la fonction.",
   gemini_invalid_json: "La réponse Gemini est invalide.",
   gemini_blocked: "La réponse Gemini a été bloquée par les filtres de sécurité.",
-  gemini_request_failed: "La réponse Gemini n'a pas pu être traitée correctement."
+  gemini_request_failed: "La réponse Gemini n'a pas pu être traitée correctement.",
+  coach_invalid_response: "La réponse structurée du coach est invalide.",
+  COACH_CONTEXT_REQUIRED: "Le contexte minimal du coach est invalide ou incomplet."
 };
 
 interface AssistantErrorBody {

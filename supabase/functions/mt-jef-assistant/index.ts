@@ -6,6 +6,13 @@ import {
   extractGeminiReply,
   normalizeGeminiFailure
 } from "./gemini.ts";
+import {
+  buildCoachPrompt,
+  buildCoachReplyText,
+  extractCoachReply,
+  normalizeCoachContext,
+  type CoachContextPayload
+} from "./coach.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,6 +38,7 @@ const requestBuckets = new Map<string, { count: number; resetAt: number }>();
 
 type ChatRole = "user" | "assistant";
 type AssistantDomain = "projects" | "tasks" | "finances";
+type AssistantMode = "assistant" | "coach";
 
 interface ChatMessage {
   role: ChatRole;
@@ -38,10 +46,12 @@ interface ChatMessage {
 }
 
 interface AssistantRequest {
+  mode?: unknown;
   message?: unknown;
   history?: unknown;
   timezone?: unknown;
   firstName?: unknown;
+  coachContext?: unknown;
 }
 
 interface ContextPayload {
@@ -75,6 +85,11 @@ Règles impératives :
 - Appuie tes réponses sur des éléments précis quand ils existent : titres, statuts, dates, échéances, montants.
 - Si plusieurs devises apparaissent, distingue-les explicitement.
 - Reste concis et utile.
+`.trim();
+
+const COACH_SYSTEM_PROMPT = `
+Tu es le coach comportemental de M.T JËF.
+Tu réponds toujours en français, sans culpabiliser, sans inventer, et avec des actions concrètes.
 `.trim();
 
 function jsonResponse(status: number, body: Record<string, unknown>) {
@@ -220,6 +235,10 @@ function normalizeTimezone(value: unknown) {
 
   const cleaned = sanitizeText(value, 80);
   return cleaned || "Europe/Paris";
+}
+
+function normalizeMode(value: unknown): AssistantMode {
+  return value === "coach" ? "coach" : "assistant";
 }
 
 function detectDomains(message: string): AssistantDomain[] {
@@ -830,61 +849,107 @@ Deno.serve(async (request) => {
   const history = normalizeHistory(body.history);
   const timezone = normalizeTimezone(body.timezone);
   const firstName = normalizeFirstName(body.firstName);
+  const mode = normalizeMode(body.mode);
+  const coachContext = mode === "coach" ? normalizeCoachContext(body.coachContext) : null;
 
-  const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    },
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false
-    }
-  });
-
-  const domains = detectDomains(message);
   const historyLength = history.length;
 
   logEvent("info", "request:accepted", {
     requestId,
     userId: user.id,
+    mode,
     messageLength: message.length,
     historyLength,
     timezone,
-    domains,
+    domains: mode === "assistant" ? detectDomains(message) : ["coach"],
+    coachSignals: coachContext?.signals.length ?? 0,
     durationMs: Date.now() - startedAt
   });
 
   try {
-    const context = await collectContext(db, domains, timezone);
+    const db =
+      mode === "assistant"
+        ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            global: {
+              headers: {
+                Authorization: `Bearer ${token}`
+              }
+            },
+            auth: {
+              persistSession: false,
+              autoRefreshToken: false
+            }
+          })
+        : null;
 
-    logEvent("info", "context:loaded", {
-      requestId,
-      userId: user.id,
-      warnings: context.warnings,
-      counts: {
-        projects: context.projects?.length ?? 0,
-        project_steps: context.project_steps?.length ?? 0,
-        tasks: context.tasks?.length ?? 0,
-        finances: context.finances?.length ?? 0,
-        balances: context.balances?.length ?? 0,
-        budgets: context.budgets?.length ?? 0
-      },
-      durationMs: Date.now() - startedAt
-    });
+    const domains = mode === "assistant" ? detectDomains(message) : [];
+    let input = "";
+    let warnings: string[] = [];
+    let sources: string[] = mode === "coach" ? ["coach"] : domains;
 
-    const input = buildPrompt({
-      message,
-      history,
-      context,
-      firstName,
-      timezone
-    });
+    if (mode === "coach") {
+      if (!coachContext) {
+        logEvent("warn", "coach:invalid_context", {
+          requestId,
+          userId: user.id,
+          durationMs: Date.now() - startedAt
+        });
+        return jsonResponse(400, {
+          error: "COACH_CONTEXT_REQUIRED",
+          message: "Le contexte minimal du coach est invalide ou incomplet."
+        });
+      }
+
+      warnings = coachContext.warnings;
+      input = buildCoachPrompt({
+        message,
+        history,
+        context: coachContext,
+        firstName,
+        timezone
+      });
+
+      logEvent("info", "coach:context:accepted", {
+        requestId,
+        userId: user.id,
+        warnings,
+        hasObjective: Boolean(coachContext.objective),
+        signals: coachContext.signals.length,
+        priorities: coachContext.weekly_snapshot.recommended_priorities.length,
+        durationMs: Date.now() - startedAt
+      });
+    } else {
+      const context = await collectContext(db as SupabaseClient, domains, timezone);
+      warnings = context.warnings;
+
+      logEvent("info", "context:loaded", {
+        requestId,
+        userId: user.id,
+        warnings: context.warnings,
+        counts: {
+          projects: context.projects?.length ?? 0,
+          project_steps: context.project_steps?.length ?? 0,
+          tasks: context.tasks?.length ?? 0,
+          finances: context.finances?.length ?? 0,
+          balances: context.balances?.length ?? 0,
+          budgets: context.budgets?.length ?? 0
+        },
+        durationMs: Date.now() - startedAt
+      });
+
+      input = buildPrompt({
+        message,
+        history,
+        context,
+        firstName,
+        timezone
+      });
+    }
 
     logEvent("info", "gemini:request:start", {
       requestId,
       userId: user.id,
+      mode,
       model: GEMINI_MODEL,
       inputLength: input.length,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
@@ -906,10 +971,11 @@ Deno.serve(async (request) => {
         },
         body: JSON.stringify(
           buildGeminiRequest({
-            systemInstruction: SYSTEM_PROMPT,
+            systemInstruction: mode === "coach" ? COACH_SYSTEM_PROMPT : SYSTEM_PROMPT,
             prompt: input,
             temperature: 0.4,
-            maxOutputTokens: MAX_OUTPUT_TOKENS
+            maxOutputTokens: MAX_OUTPUT_TOKENS,
+            responseMimeType: mode === "coach" ? "application/json" : undefined
           })
         )
       }
@@ -1003,14 +1069,53 @@ Deno.serve(async (request) => {
 
       return jsonResponse(200, {
         reply: "",
-        sources: domains,
-        warnings: context.warnings
+        mode,
+        sources,
+        warnings
+      });
+    }
+
+    if (mode === "coach") {
+      let structuredReply;
+
+      try {
+        structuredReply = extractCoachReply(result.reply);
+      } catch (error) {
+        logEvent("error", "coach:response:invalid", {
+          requestId,
+          userId: user.id,
+          error: getErrorDetails(error),
+          replyPreview: truncateText(result.reply, 900),
+          durationMs: Date.now() - startedAt
+        });
+
+        return jsonResponse(502, {
+          error: "coach_invalid_response",
+          message: "La réponse structurée du coach est invalide."
+        });
+      }
+
+      logEvent("info", "coach:response:success", {
+        requestId,
+        userId: user.id,
+        durationMs: Date.now() - startedAt,
+        nextActionDuration: structuredReply.next_action.duration_minutes,
+        nextActionDifficulty: structuredReply.next_action.difficulty
+      });
+
+      return jsonResponse(200, {
+        mode,
+        reply: buildCoachReplyText(structuredReply),
+        coach: structuredReply,
+        sources,
+        warnings
       });
     }
 
     logEvent("info", "gemini:response:success", {
       requestId,
       userId: user.id,
+      mode,
       status: geminiResponse.status,
       replyLength: result.reply.length,
       finishReason: result.finishReason,
@@ -1018,9 +1123,10 @@ Deno.serve(async (request) => {
     });
 
     return jsonResponse(200, {
+      mode,
       reply: result.reply,
-      sources: domains,
-      warnings: context.warnings
+      sources,
+      warnings
     });
   } catch (error) {
     logEvent("error", "request:unhandled_error", {
